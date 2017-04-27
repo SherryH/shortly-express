@@ -3,6 +3,7 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var bcrypt = require('bcrypt-nodejs');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -94,7 +95,41 @@ function(req, res) {
 
 //work on these functions:
 
-//app.post('/login')
+app.post('/login', function(req, res){
+
+  var username = req.body.username;
+  var password = req.body.password;
+
+  //look up in db
+  new User({ username: username }).fetch().then(function(user) {
+    if (user) {
+      bcrypt.compare(password, user.get('password'), function(err, results) {
+        if (!results) {
+          console.log('wrong pw');
+          res.redirect('/login');
+        } else {
+          req.session.regenerate(function() {
+            console.log('req.session in post login:', req.session);
+            req.session.user = user;
+            console.log('req.session.user in post login:', req.session.user);
+            res.redirect('/');
+          });
+        }
+      });
+    } else {
+      console.log('wrong username');
+      res.redirect('/login');
+    }
+  });
+});
+//
+// Load hash from your password DB.
+// bcrypt.compare("bacon", hash, function(err, res) {
+//     // res == true
+// });
+// bcrypt.compare("veggies", hash, function(err, res) {
+//     // res = false
+// });
   //take in username and password
   //check it against what we have in our DB
   //compare hashed passwords
@@ -111,18 +146,33 @@ app.post('/signup', function(req,res) {
   var password = req.body.password;
 
 
-    new User({ username: username }).fetch().then(function(found) {
-      if (found) {
-        console.log("User already exists");
-      } else {
-        //proceed to saving the user in DB
+  new User({ username: username }).fetch().then(function(user) {
+    console.log('user:', user);
+    if (!user) {
+      bcrypt.hash(password, null, null, function(err, hash) {
+        console.log('hash:', hash);
         var newUser = new User({
           username: username,
-          password: password
+          password: hash
         });
+        console.log('newUser:', newUser);
+        newUser.save().then(function() {
+          req.session.regenerate(function() {
+            console.log('req.session:', req.session);
+            req.session.user = newUser;
+          });
+        });
+      });
+      //
+    } else {
+      console.log('user already exists');
+      res.redirect('/signup');
+    }
+  }).catch((err)=>{ console.log('fetch user error', err); });
 
-      }
-    });
+//   bcrypt.hash(myPlaintextPassword, saltRounds, function(err, hash) {
+//   // Store hash in your password DB.
+// });
         // Links.create({
         //   url: uri,
         //   title: title,
